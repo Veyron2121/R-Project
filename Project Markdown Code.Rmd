@@ -32,22 +32,22 @@ population <- read_csv(paste0(path,"population_cia2017.csv"))
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 #Bens data
-data69 = left_join(x = internetusers_cia2017, y = healthexpend_cia2017, by = "Country")
-data69 = left_join(x = data69, y = lifeexpect_cia2017, by = "Country")
-data69 = left_join(x = data69, y = population_cia2017, by = "Country")
-names(data69)[names(data69)=="INTERNET USERS"] <- "internet_users"
-names(data69)[names(data69)=="(% OF GDP)"] <- "gdp_expenditure"
-names(data69)[names(data69)=="(YEARS)"] <- "life_expectancy"
-names(data69)[names(data69)=="POPULATION"] <- "population"
-data69 = data69 %>% select(Country, internet_users, gdp_expenditure, life_expectancy, population)
-data69 = data69 %>% mutate(ratio_internet = internet_users/population)
-data69 = data69 %>% filter(ratio_internet < 1)
-data69 = data69[order(data69$ratio_internet, decreasing = TRUE),]
-data69 = data69 %>% filter(!is.na(gdp_expenditure))
-data69 = data69 %>% filter(!is.na(ratio_internet))
-data69 = data69 %>% filter(!is.na(life_expectancy))
-data69 = data69 %>% mutate(gdp_bin = ifelse(gdp_expenditure > 6.9, "high", "low"))
-data69 = data69 %>% filter(!is.na(gdp_bin))
+gdp_data = left_join(x = internetusers_cia2017, y = healthexpend_cia2017, by = "Country")
+gdp_data = left_join(x = gdp_data, y = lifeexpect_cia2017, by = "Country")
+gdp_data = left_join(x = gdp_data, y = population_cia2017, by = "Country")
+names(gdp_data)[names(gdp_data)=="INTERNET USERS"] <- "internet_users"
+names(gdp_data)[names(gdp_data)=="(% OF GDP)"] <- "gdp_expenditure"
+names(gdp_data)[names(gdp_data)=="(YEARS)"] <- "life_expectancy"
+names(gdp_data)[names(gdp_data)=="POPULATION"] <- "population"
+gdp_data = gdp_data %>% select(Country, internet_users, gdp_expenditure, life_expectancy, population)
+gdp_data = gdp_data %>% mutate(ratio_internet = internet_users/population)
+gdp_data = gdp_data %>% filter(ratio_internet < 1)
+gdp_data = gdp_data[order(gdp_data$ratio_internet, decreasing = TRUE),]
+gdp_data = gdp_data %>% filter(!is.na(gdp_expenditure))
+gdp_data = gdp_data %>% filter(!is.na(ratio_internet))
+gdp_data = gdp_data %>% filter(!is.na(life_expectancy))
+gdp_data = gdp_data %>% mutate(gdp_bin = ifelse(gdp_expenditure > 6.9, "high", "low"))
+gdp_data = gdp_data %>% filter(!is.na(gdp_bin))
 
 #Andrew
 internet_users_and_population <- inner_join(x = internetusers, y = population, by = "Country")
@@ -131,7 +131,7 @@ We also created new variables in the datasets to facilitate our analysis
 - Created a new variable "gdp bin", with possible values "high" and "low". 
 - Countries that spend more than 6.9% of their gdp on health care are "high", others are "low"
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-head(data69)
+head(gdp_data)
 ```
 ## Question 1:
 We will define Internet usage in a country as the ratio of people who use the Internet versus people in the country. We used the mutate method to create a new variable for our data.
@@ -195,21 +195,21 @@ Alternative hypothesis : $\beta_1 \neq 0$ (there is an association)
 
 ## Statistical Methods (Life Expectancy)
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-data69 %>% ggplot(aes(x = life_expectancy, y = ratio_internet)) + geom_point()+ geom_smooth(method="lm", se=TRUE) + theme_bw()
+gdp_data %>% ggplot(aes(x = life_expectancy, y = ratio_internet)) + geom_point()+ geom_smooth(method="lm", se=TRUE) + theme_bw()
 ```
 
 ## Statistical Methods (Life Expectancy and Health Care)
 Visualization of relationship between life expectancy, GDP expenditure on healthcare, and internet usage
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-data69 %>% ggplot(aes(x = life_expectancy, y = ratio_internet, color = gdp_bin)) + geom_point() + theme_bw()
+gdp_data %>% ggplot(aes(x = life_expectancy, y = ratio_internet, color = gdp_bin)) + geom_point() + theme_bw()
 ```
 
 ## Statistical Methods (Life Expectancy and Health Care)
 Classification tree using life expectancy and GDP spent on healthcare as predictors for the Proportion of Internet Users
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-data69 = data69 %>% mutate(users_bin = ifelse(ratio_internet > 0.69, "high", "low") )
-rtree_fit <- rpart(users_bin ~ life_expectancy + gdp_expenditure, data69)
+gdp_data = gdp_data %>% mutate(users_bin = ifelse(ratio_internet > 0.69, "high", "low") )
+rtree_fit <- rpart(users_bin ~ life_expectancy + gdp_expenditure, gdp_data)
 plot(as.party(rtree_fit), type="simple", gp=gpar(cex=0.8))
 ```
 
@@ -281,11 +281,11 @@ plot2 + geom_point() + geom_smooth(method = 'lm') + ylim(c(0,100))
 
 Null hypothesis test assuming life expectancy and internet usage have no relation :
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-summary(lm(ratio_internet ~ life_expectancy, data=data69))$coefficients
+summary(lm(ratio_internet ~ life_expectancy, data=gdp_data))$coefficients
 ```
 r-squared value:
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-summary(lm(ratio_internet ~ life_expectancy, data=data69))$r.squared
+summary(lm(ratio_internet ~ life_expectancy, data=gdp_data))$r.squared
 ```
 
 ## Results (Democracy)
@@ -338,7 +338,7 @@ summary(lm(PCT_USERS ~ GDP_PPP, data = gdp_ppp))$r.squared
 
 Our individual investigations provided models that proved that all our variables were correlated, but would not necessarily give the strongest model for prediction. Hence, we decided to combine the most significant results from our 4 investigations into one linear model.
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-combined_data <- inner_join(x= data69, y = democracy, by = 'Country')
+combined_data <- inner_join(x= gdp_data, y = democracy, by = 'Country')
 combined_data <- inner_join(x= combined_data, y = education_data_test, by= 'Country')
 combined_data <- combined_data%>%select(Country, gdp_expenditure, life_expectancy, Score, Percentage_Tertiary_Education, Proportion)
 summary(lm(Proportion ~ Percentage_Tertiary_Education+gdp_expenditure+life_expectancy+Score, data = combined_data))$coefficients
@@ -360,7 +360,6 @@ The $R^2$ value is significantly higher.
 
 ## Acknowledgements
 
-If you received any help from someone other than your team members you can acknowledge them. For example:   
 Benjamin would like to thank Andrew,Nayan, Purvi, and Varun for working hard on this project.
 Andrew would like to thank Benjamin, Purvi, and Varun for working hard on this project.
 Purvi would like to thank Andrew. Benjamin, and Varun for working hard on this project.
