@@ -1,0 +1,369 @@
+---
+title: " Factors affecting internet usage in a country"
+author: "Andrew Abosh, Benjamin Zhuo, Varun Lodaya, Purvi Nagpal. TUT0203, Group 02"
+subtitle: "STA130H1F Final Project - 2018"
+output:
+  ioslides_presentation: default
+  widescreen: yes
+---
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# echo=FALSE will stop the code chunk from appearing in the knit document
+# warning=FALSE and message=FALSE will stop R messages from appearing in the knit document
+library(tidyverse)
+library(rpart)
+library(maps)
+library(readr)
+library(partykit)
+
+path <- "https://raw.githubusercontent.com/ntaback/UofT_STA130/master/Fall2018/Finalproject/"
+
+democracy <- read_csv(paste0(path,"democracyindex2017.csv"))
+education_cia2017 <- read_csv(paste0(path,"education_cia2017.csv"))
+gdpppp_cia2017 <- read_csv(paste0(path,"gdpppp_cia2017.csv"))
+lifeexpect_cia2017 <- read_csv(paste0(path,"lifeexpect_cia2017.csv"))
+healthexpend_cia2017 <- read_csv(paste0(path,"healthexpend_cia2017.csv"))
+internetusers_cia2017 <- read_csv(paste0(path,"internetusers_cia2017.csv"))
+telephonelines_cia2017 <- read_csv(paste0(path,"telephonelines_cia2017.csv"))
+population_cia2017 <- read_csv(paste0(path,"population_cia2017.csv"))
+world_regions <- read_csv(paste0(path,"world_regions.csv"))
+internetusers <- read_csv(paste0(path,"internetusers_cia2017.csv"))
+population <- read_csv(paste0(path,"population_cia2017.csv"))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Bens data
+data69 = left_join(x = internetusers_cia2017, y = healthexpend_cia2017, by = "Country")
+data69 = left_join(x = data69, y = lifeexpect_cia2017, by = "Country")
+data69 = left_join(x = data69, y = population_cia2017, by = "Country")
+names(data69)[names(data69)=="INTERNET USERS"] <- "internet_users"
+names(data69)[names(data69)=="(% OF GDP)"] <- "gdp_expenditure"
+names(data69)[names(data69)=="(YEARS)"] <- "life_expectancy"
+names(data69)[names(data69)=="POPULATION"] <- "population"
+data69 = data69 %>% select(Country, internet_users, gdp_expenditure, life_expectancy, population)
+data69 = data69 %>% mutate(ratio_internet = internet_users/population)
+data69 = data69 %>% filter(ratio_internet < 1)
+data69 = data69[order(data69$ratio_internet, decreasing = TRUE),]
+data69 = data69 %>% filter(!is.na(gdp_expenditure))
+data69 = data69 %>% filter(!is.na(ratio_internet))
+data69 = data69 %>% filter(!is.na(life_expectancy))
+data69 = data69 %>% mutate(gdp_bin = ifelse(gdp_expenditure > 6.9, "high", "low"))
+data69 = data69 %>% filter(!is.na(gdp_bin))
+
+#Andrew
+internet_users_and_population <- inner_join(x = internetusers, y = population, by = "Country")
+colnames(internet_users_and_population)[which(names(internet_users_and_population) == "INTERNET USERS")] <- "USERS"
+
+internet_users_and_population <- internet_users_and_population %>% select("Country", "USERS", "POPULATION") %>% mutate("population_percentage_with_internet_access" = round((USERS / POPULATION)*100, 2)) %>% select("Country", "population_percentage_with_internet_access")
+
+democracy <- inner_join(x = democracy, y = internet_users_and_population, by = "Country")
+
+colnames(democracy)[which(names(democracy) == "Functioning ofgovernment")] <- "functioning_of_government"
+democracy <- democracy %>% mutate(Score = as.double(Score))
+democracy <- democracy %>% mutate(functioning_of_government = as.double(functioning_of_government))
+
+#Varun
+share_of_the_population_with_completed_tertiary_education = read_csv("share-of-the-population-with-completed-tertiary-education.csv")
+education_data <- inner_join(x= education_cia2017, y= population_cia2017, by = 'Country')
+education_data <- inner_join(x= education_data, y= internetusers_cia2017, by = 'Country')
+education_data <- mutate(education_data, Proportion = education_data$`INTERNET USERS`/education_data$POPULATION*100)
+education_data <- select(education_data, Country, `(% OF GDP)`,`INTERNET USERS`, POPULATION, Proportion)
+education_data <- rename(education_data, 'Number_of_Users'= 'INTERNET USERS')
+education_data <- rename(education_data, 'Percentage_GDP'= '(% OF GDP)')
+tertiary_education <- filter(share_of_the_population_with_completed_tertiary_education, Year =='2010')
+tertiary_education <- select(tertiary_education, Entity, Percentage)
+tertiary_education <- rename(tertiary_education, 'Country'= 'Entity')
+tertiary_education <- rename(tertiary_education, 'Percentage_Tertiary_Education'= 'Percentage')
+education_data_test <- inner_join(x= education_data, y= tertiary_education, by = 'Country' )
+education_data_test <- education_data_test %>% mutate(Rounded_Proportion = (Proportion%/%10)*10)
+
+# Purvi
+internet_usage <- inner_join(x = internetusers, y = population, by = "Country")
+colnames(internet_usage)[which(names(internet_usage) == "INTERNET USERS")] <- "USERS"
+
+internet_usage <- internet_usage %>% select("Country", "USERS", "POPULATION") %>% mutate("PCT_USERS" = round((USERS / POPULATION)*100, 2)) %>% select("Country", "PCT_USERS")
+
+get_CIAWFB_data <- function(table_url){
+  library(rvest)
+  dat <- xml2::read_html(table_url) %>% rvest::html_table()
+  dat[[1]]
+}
+
+gdp_pc <- gdpppp_cia2017
+gdp_pc <- inner_join(x = gdp_pc, y = internet_usage, by = "Country")
+colnames(gdp_pc)[which(names(gdp_pc) == "GDP - PER CAPITA (PPP)")] <- "GDP_PER_CAPITA"
+
+gdp_pc$GDP_PER_CAPITA_2 = gsub("[\\$,]", "", gdp_pc$GDP_PER_CAPITA)
+gdp_pc$GDP_PER_CAPITA <- as.numeric(gdp_pc$GDP_PER_CAPITA_2)
+gdp_pc <- gdp_pc %>%
+  filter(PCT_USERS <= 100) %>%
+  select("Country","GDP_PER_CAPITA", "PCT_USERS")
+```
+
+
+## Objectives and Introduction
+
+We will use data from The World Factbook and external sources to:
+
+1. Define the measure of internet use in a country. 
+
+2. See if different regions of the world have different internet usage.
+
+3. Evaluate the effects of Healthcare, Democracy, Education, and Economy on the Internet Usage in a Country
+
+## The Data(optional)
+
+The data we will be using for this analysis includes the following:
+- Democracy Index report from 2017
+- Education report from 2017
+- GDPPPP (Gross Domestic Product Purchasing Power Parity) report from 2017
+- Health Expenditure report from 2017
+- Internet Users report from 2017
+- Life Expectancy report from 2017
+- Population report from 2017
+- World Regions report (unspecified date)
+
+---
+
+We created new datasets so that we could perform statistical analysis more efficiently.
+- Left join to merge population dataset with GDPPPP, life expectancy, internet users, democracy, education datasets
+
+We also created new variables in the datasets to facilitate our analysis
+- Created a new variable "gdp bin", with possible values "high" and "low". 
+- Countries that spend more than 6.9% of their gdp on health care are "high", others are "low"
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+head(data69)
+```
+## Question 1:
+We will define Internet usage in a country as the ratio of people who use the Internet versus people in the country. We used the mutate method to create a new variable for our data.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+Usage_Histogram <- ggplot(data = education_data_test) + aes(x=Rounded_Proportion) + geom_bar() +labs(x="Proportion of Internet Users") + theme_bw()
+Usage_Histogram
+```
+
+## Question 2:
+A modifcation was made to the wold map provided to us to represent a proportion of internet usage as opposed to absolute numbers, to give a better comparision between countries.
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+world <- map_data("world")
+iu <- internetusers_cia2017 %>% rename(region = Country) 
+
+iu$region[4] <- "USA" # to match world map data
+
+iu <- semi_join(iu, world, by = "region") #only keep countries according to world map data
+iu <- rename(iu, 'Country'='region')
+iu <- rename(iu, 'Users'='INTERNET USERS')
+iu[3, 2] <- 'USA'
+population_cia2017[3, 2] <- 'USA'
+```
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+internet_proportion <- inner_join(x= iu, y= population_cia2017, by = 'Country')
+internet_proportion <- internet_proportion %>%
+  select(Rank.x, Country, Users, POPULATION) %>%
+  mutate(Proportion = Users/POPULATION*100)
+world_proportion_map <- ggplot() + geom_map(
+  data = world,
+  map = world,
+  aes(x = long, y = lat, map_id = region),
+  fill = "#ffffff",
+  color = "#ffffff",
+  size = 0.20
+  )
+world_proportion_map <- world_proportion_map+ geom_map(data = internet_proportion, map = world,  aes(fill = `Proportion`, map_id = Country),color = "#000000",size = 0.15)
+world_proportion_map
+```
+
+
+## Question 3:
+Democracy, health, education, and economy have varying impacts on Internet usage
+
+## Statistical Methods (Life Expectancy)
+Fitted a linear regression model using life expectancy as a predictor for Internet Usage
+The equation of the model would be $\ y = \beta_0 + \beta_1X_1 + \epsilon_1$ where:
+
+y = mean ratio of internet users
+
+$\beta_0$ =  
+
+$\ x_1$ = life expectancy
+
+$\ \epsilon_1$ = error
+
+To test if there is an association between life expectancy and internet users, 
+Null hypothesis : $\beta_1 = 0$   (no association between life expectancy and internet usage ratio)
+Alternative hypothesis : $\beta_1 \neq 0$ (there is an association)
+
+
+## Statistical Methods (Life Expectancy)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+data69 %>% ggplot(aes(x = life_expectancy, y = ratio_internet)) + geom_point()+ geom_smooth(method="lm", se=TRUE) + theme_bw()
+```
+
+## Statistical Methods (Life Expectancy and Health Care)
+Visualization of relationship between life expectancy, GDP expenditure on healthcare, and internet usage
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+data69 %>% ggplot(aes(x = life_expectancy, y = ratio_internet, color = gdp_bin)) + geom_point() + theme_bw()
+```
+
+## Statistical Methods (Life Expectancy and Health Care)
+Classification tree using life expectancy and GDP spent on healthcare as predictors for the Proportion of Internet Users
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+data69 = data69 %>% mutate(users_bin = ifelse(ratio_internet > 0.69, "high", "low") )
+rtree_fit <- rpart(users_bin ~ life_expectancy + gdp_expenditure, data69)
+plot(as.party(rtree_fit), type="simple", gp=gpar(cex=0.8))
+```
+
+## Statistical Methods (Democracy Score)
+Democracy Score is a number from  0 to 10 based off the average of five factors:
+
+-Electoral process and pluralism
+
+-Functioning of government
+
+-Political participation
+
+-Political culture
+
+-Civil liberties
+
+## Statistical Methods (Democracy Score)
+Visualisation of the relationship between Democracy Score and the Proportion of Internet Users
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+p <- ggplot(democracy, aes(x = Score, y= population_percentage_with_internet_access))
+p + geom_point() + geom_smooth(method = 'lm')
+```
+
+## Statistical Methods (Education)
+Graph of the amount a country spends on its Education Systems v/s the Proportion of Internet Users it has.
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+GDP_Proportion <- education_data %>%
+  ggplot() + aes(x = Percentage_GDP, y= Proportion) + geom_point() + geom_smooth(method = 'lm') +ggtitle("Education Graph 1")+labs(x="Percentage of the Population with Tertiary Education", y="Proportion of Internet Users")
+
+GDP_Proportion
+```
+
+## Statistical Methods (Education)
+Graph of the Percentage of the Population that had completed Tertiary Education v/s Proportion of Internet Users.
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+Tertiary_Proportion_Colour <- education_data_test %>%
+  ggplot() + aes(x = Percentage_Tertiary_Education, y= Proportion, colour = Percentage_GDP) + geom_point() +geom_smooth(method = 'lm') + ylim(c(0, 100)) +ggtitle("Education Graph 2")+labs(x="Percentage of the Population with Tertiary Education", y="Proportion of Internet Users")
+Tertiary_Proportion_Colour
+```
+
+## Stastical Methods (Economy)
+```{r, echo = FALSE, message = FALSE, warning= FALSE}
+
+plot1<-ggplot(gdp_pc, aes(x = GDP_PER_CAPITA, y= PCT_USERS))
+plot1 + geom_point() + geom_smooth(method = 'lm') + ylim(c(0,100))
+
+gdp_ppp <- get_CIAWFB_data("https://www.cia.gov/library/publications/the-world-factbook/fields/208rank.html")
+```
+
+## Statistical Methods (Economy)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+gdp_ppp <- inner_join(x = gdp_ppp, y = internet_usage, by = "Country")
+colnames(gdp_ppp)[which(names(gdp_ppp) == "GDP (purchasing power parity)")] <- "GDP_PPP"
+
+gdp_ppp$GDP_PPP2 = gsub("[\\$,]", "", gdp_ppp$GDP_PPP)
+gdp_ppp$GDP_PPP <- as.numeric(gdp_ppp$GDP_PPP2)
+gdp_ppp <- gdp_ppp %>%
+  filter(PCT_USERS <= 100) %>%
+  select("Country","GDP_PPP", "PCT_USERS") 
+  
+plot2<-ggplot(gdp_ppp, aes(x = GDP_PPP, y= PCT_USERS))
+plot2 + geom_point() + geom_smooth(method = 'lm') + ylim(c(0,100))
+```
+
+
+## Results
+
+Null hypothesis test assuming life expectancy and internet usage have no relation :
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+summary(lm(ratio_internet ~ life_expectancy, data=data69))$coefficients
+```
+r-squared value:
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+summary(lm(ratio_internet ~ life_expectancy, data=data69))$r.squared
+```
+
+## Results (Democracy)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+summary(lm(population_percentage_with_internet_access ~ Score, data = democracy))$coefficients
+```
+$R^2$ value:
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+summary(lm(population_percentage_with_internet_access ~ Score, data = democracy))$r.squared
+```
+The equation of the model would be Proportion $= 6.5 + 7.7(X_1) + \epsilon_1$, where $X_1$ is the Democracy Score and $\epsilon_1$ is the error margin.
+
+The $R^2$ value is below average.
+
+## Results (Education)
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+summary(lm(Proportion ~ Percentage_GDP, data = education_data_test))$coefficients
+```
+$R^2$ value:
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+summary(lm(Proportion ~ Percentage_GDP, data = education_data_test))$r.squared
+```
+The equation of the model would be Proportion $= 40.3 + 2.72(X_1) + \epsilon_1$, where $X_1$ is the Percentage of GDP spent on education and $\epsilon_1$ is the error margin.
+
+The $R^2$ value is very low, as expected.
+
+## Results (Education)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+summary(lm(Proportion ~ Percentage_Tertiary_Education, data = education_data_test))$coefficients
+```
+$R^2$ value:
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+summary(lm(Proportion ~ Percentage_Tertiary_Education, data = education_data_test))$r.squared
+```
+The equation of the model would be Proportion $= 32.9+ 2.47X_1 + \epsilon_1$, where $X_1$ is the Percentage of GDP spent on education and $\epsilon_1$ is the error margin.
+
+The $R^2$ value is relatively higher, as expected.
+
+## Results (Economy)
+```{r, echo = FALSE, message= FALSE}
+summary(lm(PCT_USERS ~ GDP_PER_CAPITA, data = gdp_pc))$coefficients
+summary(lm(PCT_USERS ~ GDP_PER_CAPITA, data = gdp_pc))$r.squared
+summary(lm(PCT_USERS ~ GDP_PPP, data = gdp_ppp))$coefficients
+summary(lm(PCT_USERS ~ GDP_PPP, data = gdp_ppp))$r.squared
+```
+
+
+## Conclusion
+
+Our individual investigations provided models that proved that all our variables were correlated, but would not necessarily give the strongest model for prediction. Hence, we decided to combine the most significant results from our 4 investigations into one linear model.
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+combined_data <- inner_join(x= data69, y = democracy, by = 'Country')
+combined_data <- inner_join(x= combined_data, y = education_data_test, by= 'Country')
+combined_data <- combined_data%>%select(Country, gdp_expenditure, life_expectancy, Score, Percentage_Tertiary_Education, Proportion)
+summary(lm(Proportion ~ Percentage_Tertiary_Education+gdp_expenditure+life_expectancy+Score, data = combined_data))$coefficients
+```
+
+## Conclusion
+
+$R^2$ value:
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+summary(lm(Proportion ~ Percentage_Tertiary_Education+gdp_expenditure+life_expectancy+Score, data = combined_data))$r.squared
+```
+The equation of the model would be
+
+Proportion $= -120.56 + 0.71X_1+0.35X_2+2.06X_3+2.37X_4 + \epsilon_1$
+
+Where $X_1$ is the Percentage of GDP spent on education, $X_2$ is the Percentage of GDP spent on healthcare, $X_3$ is the life expectancy, $X_4$ is the Democracy Score, and $\epsilon_1$ is the error margin.
+
+The $R^2$ value is significantly higher.
+
+## Acknowledgements
+
+If you received any help from someone other than your team members you can acknowledge them. For example:   
+Benjamin would like to thank Andrew,Nayan, Purvi, and Varun for working hard on this project.
+Andrew would like to thank Benjamin, Purvi, and Varun for working hard on this project.
+Purvi would like to thank Andrew. Benjamin, and Varun for working hard on this project.
+Varun would like to thank Andrew, Benjamin, and Purvi for working hard on this project.
+The authors would like to thank Natalie Moon for teaching us the basics of statistics.
+
